@@ -11,9 +11,7 @@ import logging
 # Get an instance of a logger
 logger = logging.getLogger(__name__)
 # Create your views here.
-def submit(request, course_id):
-    Enrollment.objects.get(user=user, course=course))
-    Submission.objects.create(enrollment=enrollment))
+
 
 def registration_request(request):
     context = {}
@@ -113,6 +111,19 @@ def enroll(request, course_id):
          # Add each selected choice object to the submission object
          # Redirect to show_exam_result with the submission id
 #def submit(request, course_id):
+def submit(request, course_id):
+    user = request.user
+    course = get_object_or_404(Course, pk=course_id)
+    enrollment = Enrollment.objects.get(user=user, course=course)
+    submission = Submission.objects.create(enrollment=enrollment)
+    answers = extract_answers(request)
+    submission.choices.set(answers)
+    submission.save()
+    return HttpResponseRedirect(reverse(
+                viewname='onlinecourse:show_exam_result',
+                args=(course.id, submission.id,)
+                ))
+
 
 
 # <HINT> A example method to collect the selected choices from the exam form from the request object
@@ -124,7 +135,14 @@ def enroll(request, course_id):
 #            choice_id = int(value)
 #            submitted_anwsers.append(choice_id)
 #    return submitted_anwsers
-
+def extract_answers(request):
+    submitted_anwsers = []
+    for key in request.POST:
+        if key.startswith('choice'):
+            value = request.POST[key]
+            choice_id = int(value)
+            submitted_anwsers.append(choice_id)
+    return submitted_anwsers
 
 # <HINT> Create an exam result view to check if learner passed exam and show their question results and result for each question,
 # you may implement it based on the following logic:
@@ -133,6 +151,21 @@ def enroll(request, course_id):
         # For each selected choice, check if it is a correct answer or not
         # Calculate the total score
 #def show_exam_result(request, course_id, submission_id):
-
-
-
+def show_exam_result(request, course_id, submission_id):
+    course = get_object_or_404(Course, pk=course_id)
+    submission = get_object_or_404(Submission, pk=submission_id)
+    choices = submission.choices.all()
+    total_mark, mark = 0, 0
+    for question in course.question_set.all():
+        total_mark += round(question.grade)
+        if question.is_get_score(choices):
+            mark += round(question.grade)
+    
+    return render(
+        request,
+        'onlinecourse/exam_result_bootstrap.html',
+        {"course":course, "choices":choices,"mark":mark, 
+            "total_mark": total_mark, 
+            "submission": submission,
+            "grade": int((mark / total_mark) * 100)}
+    )
